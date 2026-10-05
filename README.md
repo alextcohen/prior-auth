@@ -26,7 +26,7 @@ python -m venv .venv && source .venv/bin/activate && pip install -e . && python 
 
 Output lands in `out/<chart>__<guideline>/`:
 
-- `packet.md` and `packet.html` — the review
+- `packet.md` and `packet.html` — the review. The HTML file opens in the browser when the command finishes.
 - `determination.json` — the decision the packet is rendered from
 - `guideline.json` and `chart.json` — extracted criteria and chart facts
 - `ocr/` — page markdown from both PDFs

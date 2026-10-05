@@ -3,6 +3,7 @@
 import argparse
 import os
 import re
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -42,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
         traceback.print_exc()
         return 1
     print(packet)
+    open_html(packet.with_suffix(".html"))
     return 0
 
 
@@ -78,6 +80,21 @@ def _require_env() -> None:
             + ", ".join(missing)
             + ". Copy .env.example to .env or export them."
         )
+
+
+def open_html(path: Path) -> None:
+    """Open the packet in the default browser. A failure to launch leaves the file in place."""
+    if not path.is_file():
+        return
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["open", str(path)], check=False)
+        elif sys.platform == "win32":
+            os.startfile(path)  # type: ignore[attr-defined]
+        else:
+            subprocess.run(["xdg-open", str(path)], check=False)
+    except OSError as exc:
+        print(f"Could not open {path}: {exc}", file=sys.stderr)
 
 
 def _stem(path: Path) -> str:
