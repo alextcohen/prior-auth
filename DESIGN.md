@@ -6,7 +6,7 @@ Clinic staff lose time when they submit prior authorization from memory of what 
 
 **The model reads. The code decides.**
 
-Mistral OCR turns each PDF into markdown. That is ingestion, not a coverage decision. OpenAI then fills three schemas:
+OpenAI transcribes each PDF page into markdown. That is ingestion, not a coverage decision. A later OpenAI call fills three schemas:
 
 - a guideline becomes pathways, each with `all_of` leaves, `any_of` groups, and exclusions, plus a side list of investigational or cosmetic codes
 - a chart becomes the ordered procedure and atomic facts with verbatim quotes
@@ -30,7 +30,7 @@ The packet is rendered from `determination.json`. Rendering does not score anyth
 
 A guideline whose logic is not "all of these, and one of those, unless this exclusion" will be flattened. Nested exceptions and rules that live only in a table are the first extraction failure. The pathway JSON will show the damage before the outcome does.
 
-A chart that never states the ordered procedure stops at "do not submit," because there is nothing to match. A scanned order sticker that OCR garbles fails the same way, or matches the wrong CPT. The page markdown in `ocr/` is the place to look.
+A chart that never states the ordered procedure stops at "do not submit," because there is nothing to match. A scanned order sticker that the transcription garbles fails the same way, or matches the wrong CPT. The page markdown in `ocr/` is the place to look.
 
 Paraphrased evidence is rejected on purpose. The packet will under-call "met" rather than cite a sentence the chart does not contain. That shows up as a gap plus a warning that the quote was discarded.
 

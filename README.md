@@ -10,13 +10,13 @@ The packet opens with one of three lines:
 
 ## Run
 
-Export `MISTRAL_API_KEY` and `OPENAI_API_KEY`, or copy `.env.example` to `.env` and fill them in.
+Export `OPENAI_API_KEY`, or copy `.env.example` to `.env` and fill it in.
 
 ```bash
 uv run prior-auth --guideline Documents/guideline.pdf --chart Documents/robert_mitchell_chart_final.pdf
 ```
 
-`uv run --env-file .env` loads a local `.env` if the variables are not already exported. Optional model overrides: `OPENAI_MODEL` (default `gpt-4.1`) and `MISTRAL_OCR_MODEL` (default `mistral-ocr-latest`).
+`uv run --env-file .env` loads a local `.env` if the variable is not already exported. Optional model override: `OPENAI_MODEL` (default `gpt-4.1`). That model transcribes each PDF page and fills the structured records.
 
 Without uv:
 
@@ -31,7 +31,7 @@ Output lands in `out/<chart>__<guideline>/`:
 - `guideline.json` and `chart.json` — extracted criteria and chart facts
 - `ocr/` — page markdown from both PDFs
 
-OCR results are cached by file hash under `.cache/ocr/`. Delete that directory to force a fresh read.
+Page transcription is cached by file hash under `.cache/ocr/`. Delete that directory to force a fresh read.
 
 ## The sample pair does not match
 

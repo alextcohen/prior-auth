@@ -71,7 +71,7 @@ def _require_files(guideline: Path, chart: Path) -> None:
 
 
 def _require_env() -> None:
-    missing = [name for name in ("MISTRAL_API_KEY", "OPENAI_API_KEY") if not os.environ.get(name)]
+    missing = [name for name in ("OPENAI_API_KEY",) if not os.environ.get(name)]
     if missing:
         raise PriorAuthError(
             "Missing environment variable(s): "

@@ -1,17 +1,22 @@
-"""Mistral OCR with a content-hash cache.
+"""Read a PDF into per-page markdown with OpenAI, cached by file hash.
 
-The cache key is the PDF bytes, so a rerun on the same file does not call Mistral again.
+The cache key is the PDF bytes, so a rerun on the same file does not call the model again.
+Transcription is ingestion. It does not decide coverage.
 """
 
 import base64
 import hashlib
+import io
 import json
-import os
+import re
+import sys
 from pathlib import Path
 
 from prior_auth.errors import PriorAuthError
+from prior_auth.llm import complete_text, load_prompt
 
 DEFAULT_CACHE = Path(".cache") / "ocr"
+_FENCE = re.compile(r"^```[a-zA-Z]*\n?|```$")
 
 
 def ocr_pdf(path: Path, cache_dir: Path = DEFAULT_CACHE, fetcher=None) -> str:
@@ -27,16 +32,16 @@ def ocr_pdf(path: Path, cache_dir: Path = DEFAULT_CACHE, fetcher=None) -> str:
     if cached is not None:
         return cached
 
-    fetch = fetcher or mistral_ocr
+    fetch = fetcher or openai_read_pdf
     try:
         markdown = fetch(path.name, data)
     except PriorAuthError:
         raise
     except Exception as exc:
-        raise PriorAuthError(f"Mistral OCR failed for {path.name}: {exc}") from exc
+        raise PriorAuthError(f"PDF read failed for {path.name}: {exc}") from exc
 
     if not markdown.strip():
-        raise PriorAuthError(f"Mistral OCR returned no text for {path.name}.")
+        raise PriorAuthError(f"PDF read returned no text for {path.name}.")
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(
@@ -46,55 +51,74 @@ def ocr_pdf(path: Path, cache_dir: Path = DEFAULT_CACHE, fetcher=None) -> str:
     return markdown
 
 
-def mistral_ocr(filename: str, data: bytes) -> str:
-    api_key = os.environ.get("MISTRAL_API_KEY", "")
-    if not api_key:
-        raise PriorAuthError("Missing environment variable MISTRAL_API_KEY.")
-
-    try:
-        from mistralai.client import Mistral
-    except ImportError:
-        from mistralai import Mistral
-
-    encoded = base64.standard_b64encode(data).decode("ascii")
-    model = os.environ.get("MISTRAL_OCR_MODEL", "mistral-ocr-latest")
-    document = {
-        "type": "document_url",
-        "document_url": f"data:application/pdf;base64,{encoded}",
-        "document_name": filename,
-    }
-    with Mistral(api_key=api_key) as client:
-        try:
-            response = client.ocr.process(
-                model=model,
-                document=document,
-                include_image_base64=False,
-                include_blocks=False,
-                timeout_ms=180_000,
+def openai_read_pdf(filename: str, data: bytes) -> str:
+    """Transcribe each page. Page numbers follow the PDF, not the model's wording."""
+    pages = pdf_pages(data)
+    prompt = load_prompt("transcribe.md")
+    blocks: list[str] = []
+    bodies: list[str] = []
+    for number, page in enumerate(pages, start=1):
+        _log(f"Reading {filename} page {number} of {len(pages)}")
+        text = _strip_fence(
+            complete_text(
+                [
+                    {"role": "system", "content": prompt},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "file",
+                                "file": {
+                                    "filename": f"{Path(filename).stem}-page-{number}.pdf",
+                                    "file_data": _data_url(page),
+                                },
+                            },
+                            {"type": "text", "text": "Transcribe this page."},
+                        ],
+                    },
+                ],
+                allow_empty=True,
             )
-        except TypeError:
-            response = client.ocr.process(model=model, document=document)
-        pages = _page_markdowns(response)
-    if not pages:
-        raise PriorAuthError(f"Mistral OCR returned no pages for {filename}.")
-    blocks = [f"## Page {number}\n\n{text.strip()}" for number, text in pages]
+        )
+        bodies.append(text)
+        blocks.append(f"## Page {number}\n\n{text}".rstrip())
+    if not any(body.strip() for body in bodies):
+        raise PriorAuthError(f"OpenAI returned no text for {filename}.")
     return "\n\n---\n\n".join(blocks)
 
 
-def _page_markdowns(response) -> list[tuple[int, str]]:
-    pages = getattr(response, "pages", None)
-    if pages is None and isinstance(response, dict):
-        pages = response.get("pages")
-    if not pages:
-        return []
-    blocks: list[tuple[int, str]] = []
-    for number, page in enumerate(pages, start=1):
-        if isinstance(page, dict):
-            text = page.get("markdown") or ""
-        else:
-            text = getattr(page, "markdown", "") or ""
-        blocks.append((number, text))
-    return blocks
+def pdf_pages(data: bytes) -> list[bytes]:
+    """One PDF per page. A file that cannot be split is sent whole."""
+    try:
+        from pypdf import PdfReader, PdfWriter
+
+        reader = PdfReader(io.BytesIO(data))
+        if getattr(reader, "is_encrypted", False):
+            reader.decrypt("")
+        if not reader.pages:
+            return [data]
+        pages: list[bytes] = []
+        for page in reader.pages:
+            writer = PdfWriter()
+            writer.add_page(page)
+            buffer = io.BytesIO()
+            writer.write(buffer)
+            pages.append(buffer.getvalue())
+        return pages or [data]
+    except Exception:
+        return [data]
+
+
+def _data_url(data: bytes) -> str:
+    encoded = base64.standard_b64encode(data).decode("ascii")
+    return f"data:application/pdf;base64,{encoded}"
+
+
+def _strip_fence(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = _FENCE.sub("", stripped).strip()
+    return stripped
 
 
 def _read_cache(path: Path) -> str | None:
@@ -108,3 +132,7 @@ def _read_cache(path: Path) -> str | None:
     if not isinstance(markdown, str) or not markdown.strip():
         return None
     return markdown
+
+
+def _log(message: str) -> None:
+    print(message, file=sys.stderr)
