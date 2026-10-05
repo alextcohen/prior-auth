@@ -1,0 +1,171 @@
+Synthetic prior-authorization fixtures
+=====================================
+
+Every patient, practice, member ID, and payer in this folder is fictional.
+The PDFs are digital text, in the same general shape as the assignment samples:
+a coverage guideline with a position statement, AND/OR criteria, a coding table,
+and a chart with demographics, problems, visits, a diagnostic report, and a
+planned procedure that names a CPT or HCPCS code.
+
+They extend the plan's decision cases. The assignment pair is still the one
+outside this folder:
+
+  Guideline: Documents/guideline.pdf
+             BCBS Florida 02-33000-31, varicose veins.
+             Compression trial is 3 months. CPT 36473 (mechanochemical
+             ablation) is investigational. CPT 36468 (spider veins) is
+             non-covered. Perforator ablation in the same session as
+             saphenous treatment is excluded.
+  Chart:     Documents/robert_mitchell_chart_final.pdf
+             CPT 33207 pacemaker. Expected packet: Do not submit.
+             That code is not in the vein policy.
+
+Packet labels below are the three outcomes from the plan:
+  Ready for review     every required group is supported by the chart
+  Fix before submit    the procedure matches, but a required fact is missing
+                       or the trial is too short to satisfy the policy
+  Do not submit        the code is outside the policy, on the investigational
+                       or non-covered list, or a hard exclusion applies
+
+The answer key is only in this file. It is not written into the PDFs.
+
+
+Guidelines in this folder
+-------------------------
+
+guideline_harborlight_varicose_veins_HHP-VEN-2025-04.pdf
+  Fictional Harborlight Health Plan vein policy.
+  Same shape as the BCBS vein policy, with two deliberate differences:
+  the symptom-plus-compression indication requires 6 consecutive weeks,
+  not 3 months, and mechanochemical ablation (36473, 36474) is covered.
+  Spider veins (36468) stay non-covered. Same-session perforator ablation
+  stays excluded.
+
+guideline_palm_mutual_pad_PM-02-41000-18.pdf
+  Fictional Palm Mutual policy for lower-extremity stents.
+  Covered: iliac stent 37221, femoropopliteal stent 37226.
+  Investigational: intravascular lithotripsy C9764 and C9765.
+  A femoropopliteal stent needs a stenosis of at least 70 percent, an
+  ABI of 0.90 or lower (or TBI 0.70 or lower), AND either critical limb
+  ischemia OR lifestyle-limiting claudication after a 12-week walking
+  program. Critical limb ischemia does not require the walking trial.
+
+guideline_palm_mutual_carotid_PM-02-28000-09.pdf
+  Fictional Palm Mutual policy for extracranial carotid revascularization.
+  Covered: stent with distal embolic protection 37215, endarterectomy 35301.
+  Investigational: stent without embolic protection 37216.
+  Both covered pathways require an ipsilateral TIA, amaurosis fugax, or
+  nondisabling stroke within 6 months, plus NASCET stenosis of at least
+  70 percent on imaging within 6 months. Asymptomatic stenosis is excluded.
+
+
+Vein charts
+-----------
+
+Pair these with Documents/guideline.pdf and again with the Harborlight file.
+The flip between those two policies is the point.
+
+chart_maria_santos_gvs_rfa_six_week_compression.pdf
+  Left great saphenous radiofrequency ablation, CPT 36475.
+  Reflux 1.4 seconds, diameter 6.2 mm, CEAP C4a, symptoms limit work.
+  No ulcer, bleeding, or thrombophlebitis. Stockings for six weeks
+  (August 20, 2025 through October 2, 2025), not three months.
+  Against BCBS 02-33000-31: Fix before submit.
+  Against Harborlight: Ready for review.
+
+chart_david_okonkwo_gvs_laser_criteria_met.pdf
+  Right great saphenous laser ablation, CPT 36478.
+  Reflux 1.1 seconds, diameter 5.8 mm, CEAP C3. Pain and swelling limit
+  work. Daily 30-40 mmHg compression for four months did not help.
+  Against BCBS 02-33000-31: Ready for review.
+  Against Harborlight: Ready for review.
+
+chart_linda_cho_moca.pdf
+  Left great saphenous mechanochemical ablation, CPT 36473.
+  Reflux 2.0 seconds, diameter 8.1 mm, CEAP C2. Thrombophlebitis in
+  March 2025 and July 2025. Fourteen weeks of compression did not help.
+  She declined radiofrequency ablation. The clinical criteria are met.
+  Against BCBS 02-33000-31: Do not submit. 36473 is investigational.
+  Against Harborlight: Ready for review. 36473 is covered there.
+
+chart_robert_hayes_concurrent_perforator.pdf
+  Same-session CPT 36475 (left great saphenous) and 36476 (posterior
+  tibial perforator). CEAP C6 ulcer. Saphenous vein has never been treated.
+  Against BCBS 02-33000-31: Do not submit. Concurrent perforator treatment
+  is excluded.
+  Against Harborlight: Do not submit. Same exclusion.
+
+chart_claire_nguyen_spider_veins.pdf
+  CPT 36468 for asymptomatic CEAP C1 spider veins. Duplex shows no
+  saphenous reflux (0.3 seconds, diameter about 2 mm).
+  Against either vein policy: Do not submit. 36468 is non-covered.
+
+
+Peripheral artery charts
+------------------------
+
+Pair these with guideline_palm_mutual_pad_PM-02-41000-18.pdf.
+
+chart_angela_brooks_sfa_stent_short_exercise_trial.pdf
+  Left superficial femoral stent, CPT 37226. ABI 0.68. CTA 80 percent
+  stenosis. Claudication at one block. Walking program lasted three weeks
+  (September 10, 2025 through October 1, 2025), not twelve. No rest pain
+  and no ulcer.
+  Expected: Fix before submit.
+
+chart_samuel_reed_sfa_stent_cli.pdf
+  Right superficial femoral stent, CPT 37226. ABI 0.41. CTA 90 percent
+  stenosis. Ischemic rest pain and a nonhealing great-toe ulcer.
+  No walking trial, because the indication is critical limb ischemia.
+  Expected: Ready for review.
+
+chart_nora_alvarez_intravascular_lithotripsy.pdf
+  Left superficial femoral intravascular lithotripsy, HCPCS C9765.
+  ABI 0.48. CTA 85 percent stenosis with calcification. Rest pain and
+  an ankle ulcer, so the clinical stent pathway would otherwise qualify.
+  Expected: Do not submit. C9765 is investigational. A stent was not ordered.
+
+chart_thomas_greene_carotid_endarterectomy.pdf
+  This is a carotid chart. Against the PAD policy the order is CPT 35301.
+  Expected: Do not submit. 35301 is not in the PAD policy.
+
+chart_frank_doyle_messy_unsigned_order.pdf
+  Stress case. August note: left ABI 0.88, symptoms after four blocks,
+  no procedure. Unsigned addendum: ABI 0.54 with no leg named. CTA:
+  55 percent left superficial femoral stenosis. Scheduling comment only
+  ("angio plus or minus stent"). No CPT is signed.
+  Expected: not Ready for review. There is no ordered code, and the only
+  measured stenosis is 55 percent, under the 70 percent threshold.
+
+
+Carotid charts
+--------------
+
+Pair these with guideline_palm_mutual_carotid_PM-02-28000-09.pdf.
+
+chart_helen_park_carotid_stent.pdf
+  Right cervical carotid stent with distal embolic protection, CPT 37215.
+  Right hemispheric TIA on January 20, 2026. CTA 82 percent NASCET,
+  artery not occluded.
+  Expected: Ready for review.
+
+chart_ruth_bennett_asymptomatic_carotid_stent.pdf
+  CPT 37215 with embolic protection. CTA 76 percent NASCET. The note
+  states she has never had a TIA, amaurosis fugax, or stroke.
+  Expected: Do not submit. Asymptomatic disease is an exclusion, not a
+  missing document. The packet should not ask staff to add a TIA.
+
+chart_thomas_greene_carotid_endarterectomy.pdf
+  Left carotid endarterectomy, CPT 35301. Left-eye amaurosis fugax in
+  February 2026. CTA 85 percent NASCET, artery not occluded.
+  Against the carotid policy: Ready for review.
+  Against the PAD policy, or against either vein policy: Do not submit.
+
+
+Other mismatches
+----------------
+
+A chart whose CPT is absent from the guideline should be Do not submit,
+including Samuel Reed (37226) or Helen Park (37215) run against a vein
+policy, and Maria Santos (36475) run against the PAD or carotid policy.
+That is the same situation as the pacemaker chart against the vein policy.
