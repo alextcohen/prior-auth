@@ -74,6 +74,77 @@ def quote_in_text(quote: str, source: str) -> bool:
     return needle in normalize_ws(source)
 
 
+_CAPS_AND = re.compile(r"\s+AND\s+")
+_LOWER_AND = re.compile(r"\s+and\s+", re.IGNORECASE)
+_THERE_IS = re.compile(r"^there\s+(?:is|are)\b", re.IGNORECASE)
+_VERB_CONTINUATION = re.compile(
+    r"^(?:does|do|did|has|have|had|is|are|was|were|will|can|cannot|may|must)\b",
+    re.IGNORECASE,
+)
+_SCALE_HEAD = re.compile(
+    r"^(?:(?:an?|the)\s+)?"
+    r"(?:[A-Za-z][\w./()-]*\s+){0,8}"
+    r"(?:\([^)]*\)\s*)?"
+    r"(?:class|stage|grade|score)\s+(?:of\s+)?"
+    r"(?:[A-Za-z]?\d+[a-z]?|[IVXLC]{1,6})\b",
+    re.IGNORECASE,
+)
+_MEASURE = re.compile(
+    r"\b(?:at least|or greater|or more|or higher|greater than|months?|weeks?|days?|hours?|mm|millimeters?|cm|centimeters?)\b",
+    re.IGNORECASE,
+)
+_STITCH = re.compile(r"\s*(?:\n+|\s/\s|\s\|\s|\.{3,}|…)\s*")
+
+
+def quote_is_grounded(quote: str, source: str) -> bool:
+    """True when every stored span appears in the chart."""
+    parts = [part.strip() for part in quote.split("\n") if part.strip()]
+    return bool(parts) and all(quote_in_text(part, source) for part in parts)
+
+
+def grounded_quotes(quote: str, source: str) -> list[str]:
+    """Chart spans cited by a score.
+
+    One contiguous span is kept when it appears in the chart. Spans joined by a
+    slash, ellipsis, newline, or the word "and" are kept when each span appears.
+    A paraphrase returns nothing.
+    """
+    cleaned = quote.strip()
+    if not cleaned:
+        return []
+    if quote_in_text(cleaned, source):
+        return [cleaned]
+    pieces = [piece.strip(" \"'") for piece in _STITCH.split(cleaned) if piece.strip(" \"'")]
+    if len(pieces) <= 1:
+        pieces = [
+            piece.strip(" \"'")
+            for piece in _parts_outside_parens(cleaned, _LOWER_AND)
+            if len(piece.strip(" \"'")) >= 12 and " " in piece
+        ]
+    if len(pieces) > 1 and all(quote_in_text(piece, source) for piece in pieces):
+        return pieces
+    return []
+
+
+def split_compound_requirement(text: str) -> list[str]:
+    """Split a leaf that still joins two checkable facts.
+
+    This is structure, not a coverage rule. A class, stage, grade, or score
+    stays its own leaf so it can be quoted on its own. An any_of alternative
+    that is already a list of leaves is left as that list.
+    """
+    cleaned = text.strip()
+    if not cleaned:
+        return [text]
+    parts = _split_requirement_once(cleaned)
+    if not parts:
+        return [cleaned]
+    expanded: list[str] = []
+    for part in parts:
+        expanded.extend(split_compound_requirement(part))
+    return expanded
+
+
 def normalize_guideline(guideline: Guideline) -> Guideline:
     """Make leaf and pathway ids unique so later scoring cannot collide."""
     seen_pathways: set[str] = set()
@@ -100,11 +171,23 @@ def normalize_guideline(guideline: Guideline) -> Guideline:
                 return leaf
             return leaf.model_copy(update={"id": leaf_id})
 
-        pathway.all_of = [fix(leaf) for leaf in pathway.all_of]
+        def expand(leaves: list[Leaf]) -> list[Leaf]:
+            expanded: list[Leaf] = []
+            for leaf in leaves:
+                parts = split_compound_requirement(leaf.text)
+                if len(parts) == 1:
+                    expanded.append(fix(leaf))
+                    continue
+                for index, part in enumerate(parts, start=1):
+                    new_id = leaf.id if index == 1 else f"{leaf.id}_{index}"
+                    expanded.append(fix(leaf.model_copy(update={"id": new_id, "text": part})))
+            return expanded
+
+        pathway.all_of = expand(pathway.all_of)
         seen_options: set[str] = set()
         for group_index, group in enumerate(pathway.any_of_groups, start=1):
             group.id = _slug(group.id) or f"group_{group_index}"
-            group.leaves = [fix(leaf) for leaf in group.leaves]
+            group.leaves = expand(group.leaves)
             for option_index, option in enumerate(group.all_of_options, start=1):
                 option_base = _slug(option.id) or f"option_{option_index}"
                 option_id = option_base
@@ -114,8 +197,8 @@ def normalize_guideline(guideline: Guideline) -> Guideline:
                     option_suffix += 1
                 seen_options.add(option_id)
                 option.id = option_id
-                option.leaves = [fix(leaf) for leaf in option.leaves]
-        pathway.exclusions = [fix(leaf) for leaf in pathway.exclusions]
+                option.leaves = expand(option.leaves)
+        pathway.exclusions = expand(pathway.exclusions)
     return guideline
 
 
@@ -261,8 +344,9 @@ def verify_scores(
             else:
                 verified.append(score.model_copy(update={"quote": ""}))
             continue
-        if quote_in_text(quote, chart_text):
-            verified.append(score)
+        spans = grounded_quotes(quote, chart_text)
+        if spans:
+            verified.append(score.model_copy(update={"quote": "\n".join(spans)}))
             continue
         warnings.append(
             f"Quote for criterion {score.criterion_id} is not in the chart and was discarded."
@@ -397,7 +481,7 @@ def _criterion_results(
                 rationale=score.rationale,
                 quote_verified=bool(quote)
                 and score.status == LeafStatus.MET
-                and quote_in_text(quote, chart_text),
+                and quote_is_grounded(quote, chart_text),
             )
         )
 
@@ -549,7 +633,9 @@ def _letter(chart: Chart, pathway: Pathway, criteria: list[CriterionResult]) -> 
     ]
     for row in supported:
         location = f" ({row.section})" if row.section else ""
-        lines.append(f'- {row.text}: "{row.quote}"{location}')
+        spans = [span.strip() for span in row.quote.split("\n") if span.strip()]
+        for span in spans:
+            lines.append(f'- {row.text}: "{span}"{location}')
     lines.extend(
         [
             "",
@@ -622,3 +708,75 @@ def _payer_tokens(value: str) -> set[str]:
 def _slug(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", value.casefold()).strip("_")
     return slug
+
+
+def _split_requirement_once(text: str) -> list[str] | None:
+    caps = _parts_outside_parens(text, _CAPS_AND)
+    if len(caps) > 1:
+        return caps
+    there = _split_there_is_and(text)
+    if there:
+        return there
+    return _split_finding_and_scale(text)
+
+
+def _split_there_is_and(text: str) -> list[str] | None:
+    parts = _parts_outside_parens(text, _LOWER_AND)
+    if len(parts) < 2 or not _THERE_IS.match(parts[0]):
+        return None
+    if any(not _separate_fact(part) for part in parts[1:]):
+        return None
+    return parts
+
+
+def _split_finding_and_scale(text: str) -> list[str] | None:
+    parts = _parts_outside_parens(text, _LOWER_AND)
+    if len(parts) < 2 or len(parts[0].split()) < 3:
+        return None
+    if any(not _SCALE_HEAD.match(part) for part in parts[1:]):
+        return None
+    return parts
+
+
+def _separate_fact(part: str) -> bool:
+    """A second conjunct that can be checked without the first."""
+    if _VERB_CONTINUATION.match(part):
+        return False
+    if _SCALE_HEAD.match(part):
+        return True
+    return len(part.split()) >= 4 and bool(re.search(r"\d", part) and _MEASURE.search(part))
+
+
+def _parts_outside_parens(text: str, pattern: re.Pattern[str]) -> list[str]:
+    """Split on pattern only outside parentheses."""
+    parts: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == "(":
+            depth += 1
+            buf.append(char)
+            index += 1
+            continue
+        if char == ")" and depth:
+            depth -= 1
+            buf.append(char)
+            index += 1
+            continue
+        if depth == 0:
+            match = pattern.match(text, index)
+            if match:
+                piece = "".join(buf).strip(" ;")
+                if piece:
+                    parts.append(piece)
+                buf = []
+                index = match.end()
+                continue
+        buf.append(char)
+        index += 1
+    tail = "".join(buf).strip(" ;")
+    if tail:
+        parts.append(tail)
+    return parts

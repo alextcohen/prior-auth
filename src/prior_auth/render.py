@@ -130,7 +130,7 @@ def render_html(determination: Determination) -> str:
     .ready_for_review {{ background: #dcfce7; }}
     .card {{ padding: 0.75rem 0; border-top: 1px solid #e7e5e4; }}
     .status {{ font-weight: 700; }}
-    blockquote {{ margin: 0.4rem 0; padding-left: 0.8rem; border-left: 3px solid #d6d3d1; }}
+    blockquote {{ margin: 0.4rem 0; padding-left: 0.8rem; border-left: 3px solid #d6d3d1; white-space: pre-wrap; }}
     pre {{ white-space: pre-wrap; font-family: inherit; background: #fff; padding: 1rem; border: 1px solid #e7e5e4; }}
     .meta {{ color: #57534e; }}
   </style>
@@ -184,8 +184,9 @@ def _criterion_markdown(row: CriterionResult) -> list[str]:
         f"- Group: {_group_label(row.group)}",
         f"- Status: {_STATUS_LABELS.get(row.status.value, row.status.value)}",
     ]
-    if row.quote:
-        lines.append(f"- Quote: \"{row.quote}\"")
+    spans = [span.strip() for span in row.quote.split("\n") if span.strip()]
+    if spans:
+        lines.extend(f'- Quote: "{span}"' for span in spans)
     else:
         lines.append("- Quote: none")
     if row.section:
@@ -197,9 +198,10 @@ def _criterion_markdown(row: CriterionResult) -> list[str]:
 
 
 def _criterion_html(row: CriterionResult) -> str:
+    spans = [span.strip() for span in row.quote.split("\n") if span.strip()]
     quote = (
-        f"<blockquote>{html.escape(row.quote)}</blockquote>"
-        if row.quote
+        "".join(f"<blockquote>{html.escape(span)}</blockquote>" for span in spans)
+        if spans
         else "<p class=\"meta\">No quote</p>"
     )
     source = f"<p class=\"meta\">Source: {html.escape(row.section)}</p>" if row.section else ""

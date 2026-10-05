@@ -375,6 +375,128 @@ def test_nested_and_with_a_missing_part_is_a_gap():
     assert determination.letter is None
 
 
+def test_finding_and_class_split_into_two_required_leaves():
+    pathway = _pathway(
+        all_of=[
+            _leaf("combo", "There is demonstrated saphenous reflux and CEAP class C2 or greater"),
+            _leaf("compression", "Compression therapy for at least 3 months"),
+        ],
+        any_of_groups=[],
+        exclusions=[
+            _leaf(
+                "cosmetic",
+                "Treatment is considered cosmetic and does not meet the definition of medical necessity",
+            )
+        ],
+    )
+    pathway.any_of_groups = []
+    guideline = normalize_guideline(_guideline(pathway))
+    leaves = guideline.pathways[0].all_of
+    assert [leaf.text for leaf in leaves] == [
+        "There is demonstrated saphenous reflux",
+        "CEAP class C2 or greater",
+        "Compression therapy for at least 3 months",
+    ]
+    assert len(guideline.pathways[0].exclusions) == 1
+    assert "and does not" in guideline.pathways[0].exclusions[0].text
+
+    text = "Duplex ultrasound demonstrates saphenous reflux. CEAP class C4a, symptomatic."
+    scores = [
+        _score(leaves[0].id, LeafStatus.MET, "Duplex ultrasound demonstrates saphenous reflux."),
+        _score(leaves[1].id, LeafStatus.MET, "CEAP class C4a, symptomatic."),
+        _score(leaves[2].id, LeafStatus.NOT_DOCUMENTED),
+    ]
+    determination = decide(guideline, _chart("36478"), text, scores)
+    assert determination.outcome == Outcome.FIX_BEFORE_SUBMIT
+    assert determination.missing_items == ["Compression therapy for at least 3 months"]
+    assert determination.letter is None
+
+
+def test_and_inside_a_parenthetical_or_a_single_course_stays_one_leaf():
+    pathway = _pathway(
+        all_of=[
+            _leaf(
+                "tributaries",
+                "The superficial veins (accessory saphenous and symptomatic tributaries) have been previously eliminated",
+            ),
+            _leaf(
+                "ulcers",
+                "Ulcers have not resolved following combined superficial vein treatment and compression therapy for at least 3 months",
+            ),
+            _leaf("pain", "There is pain and swelling"),
+        ],
+        any_of_groups=[],
+        exclusions=[],
+    )
+    guideline = normalize_guideline(_guideline(pathway))
+    assert [leaf.text for leaf in guideline.pathways[0].all_of] == [
+        "The superficial veins (accessory saphenous and symptomatic tributaries) have been previously eliminated",
+        "Ulcers have not resolved following combined superficial vein treatment and compression therapy for at least 3 months",
+        "There is pain and swelling",
+    ]
+
+
+def test_uppercase_and_splits_inside_a_nested_option():
+    pathway = _symptom_pathway()
+    pathway.any_of_groups[0].all_of_options[0].leaves = [
+        _leaf("combo", "Pain is present AND compression failed for 3 months")
+    ]
+    guideline = normalize_guideline(_guideline(pathway))
+    option = guideline.pathways[0].any_of_groups[0].all_of_options[0]
+    assert [leaf.text for leaf in option.leaves] == [
+        "Pain is present",
+        "compression failed for 3 months",
+    ]
+
+
+def test_joined_verbatim_spans_stay_met():
+    scores = [
+        _score(
+            "reflux",
+            LeafStatus.MET,
+            "Duplex ultrasound demonstrates saphenous reflux. / The vein diameter is 4.2 mm.",
+        )
+    ]
+    pathway = _pathway(
+        all_of=[_leaf("reflux", "Demonstrated saphenous reflux")],
+        any_of_groups=[],
+        exclusions=[],
+    )
+    determination = decide(_guideline(pathway), _chart("36478"), CHART_TEXT, scores)
+    assert determination.criteria[0].status == LeafStatus.MET
+    assert determination.criteria[0].quote_verified
+    assert "Duplex ultrasound demonstrates saphenous reflux." in determination.criteria[0].quote
+    assert "The vein diameter is 4.2 mm." in determination.criteria[0].quote
+    assert determination.letter is not None
+    assert "Duplex ultrasound demonstrates saphenous reflux." in determination.letter
+
+
+def test_and_joined_verbatim_spans_stay_met_and_a_paraphrase_does_not():
+    pathway = _pathway(
+        all_of=[
+            _leaf("reflux", "Demonstrated saphenous reflux"),
+            _leaf("size", "Varicosities at least 3 millimeters"),
+        ],
+        any_of_groups=[],
+        exclusions=[],
+    )
+    scores = [
+        _score(
+            "reflux",
+            LeafStatus.MET,
+            "Duplex ultrasound demonstrates saphenous reflux. and The vein diameter is 4.2 mm.",
+        ),
+        _score("size", LeafStatus.MET, "duplex shows a vein wider than 3 mm"),
+    ]
+    determination = decide(_guideline(pathway), _chart("36478"), CHART_TEXT, scores)
+    reflux = determination.criteria[0]
+    size = determination.criteria[1]
+    assert reflux.status == LeafStatus.MET
+    assert "Duplex ultrasound demonstrates saphenous reflux." in reflux.quote
+    assert size.status == LeafStatus.NOT_DOCUMENTED
+    assert size.quote == ""
+
+
 def test_nested_and_contradiction_denies_when_no_alternative_remains():
     scores = [
         _score("reflux", LeafStatus.MET, "Duplex ultrasound demonstrates saphenous reflux."),

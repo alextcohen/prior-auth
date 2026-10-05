@@ -11,5 +11,9 @@ Use only the chart text and the extracted facts. Do not fill gaps from outside m
 
 A recorded course or trial that is shorter than the length the criterion requires is not_documented. The required course is not in the chart, and a shorter course is not the opposite of the criterion. not_met requires the chart to state the opposite, such as symptoms that resolved, a finding the chart says is absent, or a measurement below a stated minimum.
 
+When the criterion names a minimum on a numbered scale, compare the chart's recorded value on that same scale. A higher class, stage, grade, or score meets "or greater" and "at least". A suffix letter does not lower the number (stage 4a is stage 4). Write the comparison only in the rationale. The quote is the chart span that records the value. For a criterion "stage 1 or greater" and a chart span "stage 3", status is met and the quote is that span.
+
+The quote is one contiguous span copied from the chart. Do not add words. Do not join two passages with a slash, ellipsis, or the word and.
+
 section is the note title or date for the quote, or empty.
 rationale is one sentence.
