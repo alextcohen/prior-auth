@@ -27,11 +27,23 @@ class Leaf(BaseModel):
     text: str = Field(description="One atomic requirement, in the guideline's own words.")
 
 
+class AllOfOption(BaseModel):
+    id: str = Field(description="Stable snake_case id for this combined alternative.")
+    name: str = Field(description="Short name for this alternative inside an OR group.")
+    leaves: list[Leaf] = Field(
+        description="Every leaf must be met for this alternative to satisfy the OR group."
+    )
+
+
 class AnyOfGroup(BaseModel):
     id: str = Field(description="Stable snake_case id for this indication group.")
     name: str = Field(description="Short name, such as 'clinical indications'.")
     leaves: list[Leaf] = Field(
-        description="The group is satisfied when at least one leaf is met."
+        description="Single-fact alternatives. One met leaf can satisfy the group."
+    )
+    all_of_options: list[AllOfOption] = Field(
+        default_factory=list,
+        description="Alternatives that are themselves AND lists. Empty when every alternative is a single fact.",
     )
 
 
@@ -46,7 +58,7 @@ class Pathway(BaseModel):
     )
     all_of: list[Leaf] = Field(description="Every leaf must be met.")
     any_of_groups: list[AnyOfGroup] = Field(
-        description="Each group is an OR list: one leaf must be met."
+        description="Each group is an OR list: one single-fact leaf, or one nested AND alternative, must be met."
     )
     exclusions: list[Leaf] = Field(
         description="If a leaf is met, this pathway does not meet medical necessity."

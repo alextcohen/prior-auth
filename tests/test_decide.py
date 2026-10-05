@@ -7,6 +7,7 @@ from prior_auth.decide import (
     quote_in_text,
 )
 from prior_auth.schemas import (
+    AllOfOption,
     AnyOfGroup,
     Chart,
     Guideline,
@@ -320,3 +321,69 @@ def test_ambiguous_cpt_uses_the_proposal():
 
 def test_chart_codes_from_planned_procedures():
     assert chart_codes(_chart("CPT 36478")) == {"36478"}
+
+
+def _symptom_pathway() -> Pathway:
+    return _pathway(
+        all_of=[_leaf("reflux", "Demonstrated saphenous reflux")],
+        any_of_groups=[
+            AnyOfGroup(
+                id="indications",
+                name="clinical indications",
+                leaves=[_leaf("ulcer", "Ulceration secondary to venous stasis")],
+                all_of_options=[
+                    AllOfOption(
+                        id="symptoms",
+                        name="symptomatic reflux",
+                        leaves=[
+                            _leaf("pain", "Symptoms associated with saphenous reflux"),
+                            _leaf("months", "Compression therapy for at least 3 months"),
+                        ],
+                    )
+                ],
+            )
+        ],
+        exclusions=[],
+    )
+
+
+def test_nested_and_satisfies_the_or_when_every_part_is_met():
+    scores = [
+        _score("reflux", LeafStatus.MET, "Duplex ultrasound demonstrates saphenous reflux."),
+        _score("ulcer", LeafStatus.NOT_MET, "No ulceration."),
+        _score("pain", LeafStatus.MET, "Symptoms interfere with activities of daily living."),
+        _score("months", LeafStatus.MET, "Compression stockings for 4 months without improvement."),
+    ]
+    text = CHART_TEXT + " No ulceration."
+    determination = decide(_guideline(_symptom_pathway()), _chart("36478"), text, scores)
+    assert determination.outcome == Outcome.READY_FOR_REVIEW
+    assert determination.letter is not None
+    assert "Compression stockings for 4 months without improvement." in determination.letter
+
+
+def test_nested_and_with_a_missing_part_is_a_gap():
+    scores = [
+        _score("reflux", LeafStatus.MET, "Duplex ultrasound demonstrates saphenous reflux."),
+        _score("ulcer", LeafStatus.NOT_MET, "No ulceration."),
+        _score("pain", LeafStatus.MET, "Symptoms interfere with activities of daily living."),
+        _score("months", LeafStatus.NOT_DOCUMENTED),
+    ]
+    text = CHART_TEXT + " No ulceration."
+    determination = decide(_guideline(_symptom_pathway()), _chart("36478"), text, scores)
+    assert determination.outcome == Outcome.FIX_BEFORE_SUBMIT
+    assert any("3 months" in item for item in determination.missing_items)
+    assert determination.letter is None
+
+
+def test_nested_and_contradiction_denies_when_no_alternative_remains():
+    scores = [
+        _score("reflux", LeafStatus.MET, "Duplex ultrasound demonstrates saphenous reflux."),
+        _score("ulcer", LeafStatus.NOT_MET, "No ulceration."),
+        _score("pain", LeafStatus.MET, "Symptoms interfere with activities of daily living."),
+        _score("months", LeafStatus.NOT_MET, "Symptoms resolved after stockings."),
+    ]
+    text = CHART_TEXT + " No ulceration. Symptoms resolved after stockings."
+    determination = decide(_guideline(_symptom_pathway()), _chart("36478"), text, scores)
+    assert determination.outcome == Outcome.DO_NOT_SUBMIT
+    assert "clinical indications" in determination.outcome_reason
+    assert determination.letter is None

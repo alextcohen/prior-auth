@@ -40,6 +40,15 @@ def score_pathway(pathway: Pathway, chart: Chart, chart_markdown: str) -> list[L
     for group in pathway.any_of_groups:
         for leaf in group.leaves:
             criteria.append({"id": leaf.id, "group": f"any_of:{group.name}", "text": leaf.text})
+        for option in group.all_of_options:
+            for leaf in option.leaves:
+                criteria.append(
+                    {
+                        "id": leaf.id,
+                        "group": f"any_of:{group.name} / all_of:{option.name}",
+                        "text": leaf.text,
+                    }
+                )
     for leaf in pathway.exclusions:
         criteria.append({"id": leaf.id, "group": "exclusion", "text": leaf.text})
     if not criteria:

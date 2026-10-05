@@ -242,7 +242,12 @@ def _group_label(group: str) -> str:
     if group == "exclusion":
         return "Exclusion"
     if group.startswith("any_of:"):
-        return f"One of: {group.split(':', 1)[1]}"
+        rest = group.split(":", 1)[1]
+        marker = " / all_of:"
+        if marker in rest:
+            parent, option = rest.split(marker, 1)
+            return f"One of: {parent}; all of: {option}"
+        return f"One of: {rest}"
     return group
 
 

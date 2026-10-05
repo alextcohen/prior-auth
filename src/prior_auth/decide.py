@@ -101,9 +101,20 @@ def normalize_guideline(guideline: Guideline) -> Guideline:
             return leaf.model_copy(update={"id": leaf_id})
 
         pathway.all_of = [fix(leaf) for leaf in pathway.all_of]
+        seen_options: set[str] = set()
         for group_index, group in enumerate(pathway.any_of_groups, start=1):
             group.id = _slug(group.id) or f"group_{group_index}"
             group.leaves = [fix(leaf) for leaf in group.leaves]
+            for option_index, option in enumerate(group.all_of_options, start=1):
+                option_base = _slug(option.id) or f"option_{option_index}"
+                option_id = option_base
+                option_suffix = 2
+                while option_id in seen_options:
+                    option_id = f"{option_base}_{option_suffix}"
+                    option_suffix += 1
+                seen_options.add(option_id)
+                option.id = option_id
+                option.leaves = [fix(leaf) for leaf in option.leaves]
         pathway.exclusions = [fix(leaf) for leaf in pathway.exclusions]
     return guideline
 
@@ -395,9 +406,26 @@ def _criterion_results(
     for group in pathway.any_of_groups:
         for leaf in group.leaves:
             add(leaf, f"any_of:{group.name}")
+        for option in group.all_of_options:
+            for leaf in option.leaves:
+                add(leaf, f"any_of:{group.name} / all_of:{option.name}")
     for leaf in pathway.exclusions:
         add(leaf, "exclusion")
     return rows
+
+
+def _option_status(leaves: list[Leaf], status_of) -> LeafStatus:
+    """An AND alternative fails on any contradiction, and stays open on a gap."""
+    if not leaves:
+        return LeafStatus.NOT_DOCUMENTED
+    statuses = [status_of(leaf.id) for leaf in leaves]
+    if any(status == LeafStatus.NOT_MET for status in statuses):
+        return LeafStatus.NOT_MET
+    if any(status == LeafStatus.NOT_DOCUMENTED for status in statuses):
+        return LeafStatus.NOT_DOCUMENTED
+    if any(status == LeafStatus.MET for status in statuses):
+        return LeafStatus.MET
+    return LeafStatus.NOT_APPLICABLE
 
 
 def _evaluate(
@@ -433,20 +461,41 @@ def _evaluate(
     failed_groups = []
     open_groups = []
     for group in pathway.any_of_groups:
-        applicable = [
-            leaf for leaf in group.leaves if status_of(leaf.id) != LeafStatus.NOT_APPLICABLE
+        leaf_states = [
+            status_of(leaf.id)
+            for leaf in group.leaves
+            if status_of(leaf.id) != LeafStatus.NOT_APPLICABLE
         ]
-        if any(status_of(leaf.id) == LeafStatus.MET for leaf in applicable):
+        option_states = [
+            _option_status(option.leaves, status_of)
+            for option in group.all_of_options
+            if _option_status(option.leaves, status_of) != LeafStatus.NOT_APPLICABLE
+        ]
+        states = [*leaf_states, *option_states]
+        if any(state == LeafStatus.MET for state in states):
             continue
-        if not applicable or any(status_of(leaf.id) == LeafStatus.NOT_DOCUMENTED for leaf in applicable):
+        if not states or any(state == LeafStatus.NOT_DOCUMENTED for state in states):
             open_groups.append(group)
         else:
             failed_groups.append(group)
 
     missing = [leaf.text for leaf in missing_leaves]
     for group in open_groups:
-        options = "; ".join(leaf.text for leaf in group.leaves)
-        missing.append(f"At least one of ({group.name}): {options}")
+        noted = False
+        for leaf in group.leaves:
+            if status_of(leaf.id) == LeafStatus.NOT_DOCUMENTED:
+                missing.append(leaf.text)
+                noted = True
+        for option in group.all_of_options:
+            if _option_status(option.leaves, status_of) != LeafStatus.NOT_DOCUMENTED:
+                continue
+            for leaf in option.leaves:
+                if status_of(leaf.id) == LeafStatus.NOT_DOCUMENTED:
+                    missing.append(f"{option.name}: {leaf.text}")
+                    noted = True
+        if not noted:
+            options = "; ".join(leaf.text for leaf in group.leaves)
+            missing.append(f"At least one of ({group.name}): {options}")
 
     for leaf in unmet:
         risks.append(f"Required criterion not met: {leaf.text}")
