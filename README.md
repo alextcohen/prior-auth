@@ -68,3 +68,7 @@ Windows PowerShell (not built or tested), after `.venv\Scripts\python.exe -m pip
 ```powershell
 .venv\Scripts\python.exe -m pytest
 ```
+
+## Copyright
+
+Copyright (c) 2026 Alexander Cohen. All rights reserved. See [LICENSE](LICENSE).

@@ -3,6 +3,8 @@ name = "prior-auth"
 version = "0.1.0"
 description = "Clinician review packet for prior authorization"
 readme = "README.md"
+authors = [{ name = "Alexander Cohen" }]
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = [
   "openai>=1.68.0",

@@ -1,0 +1,16 @@
+Copyright (c) 2026 Alexander Cohen
+
+All rights reserved.
+
+This project is my own work. You may read it and run it to review this
+coding sample. Any other use needs my permission.
+
+Two files were provided with the assignment and are not mine:
+
+- Documents/guideline.pdf
+- Documents/robert_mitchell_chart_final.pdf
+
+The charts and guidelines in Documents/fake_examples/ are fictional fixtures
+I wrote for tests. They are not real patients or real payer policies.
+
+Dependencies listed in pyproject.toml remain under their own licenses.
