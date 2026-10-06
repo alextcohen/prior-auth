@@ -10,18 +10,26 @@ The packet opens with one of three lines:
 
 ## Run
 
-Export `OPENAI_API_KEY`, or copy `.env.example` to `.env` and fill it in.
+This was built and tested on macOS. The Windows and Linux commands below were not built or tested on those systems.
 
-```bash
-uv run prior-auth --guideline Documents/guideline.pdf --chart Documents/robert_mitchell_chart_final.pdf
-```
+Export `OPENAI_API_KEY`, or copy `.env.example` to `.env` and fill it in. A local `.env` is loaded if the variable is not already exported. Optional model override: `OPENAI_MODEL` (default `gpt-4.1`). That model transcribes each PDF page and fills the structured records.
 
-`uv run --env-file .env` loads a local `.env` if the variable is not already exported. Optional model override: `OPENAI_MODEL` (default `gpt-4.1`). That model transcribes each PDF page and fills the structured records.
-
-Without uv:
+macOS:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate && pip install -e . && python -m prior_auth --guideline Documents/guideline.pdf --chart Documents/robert_mitchell_chart_final.pdf
+```
+
+Linux (not built or tested):
+
+```bash
+python3 -m venv .venv && .venv/bin/python -m pip install -e . && .venv/bin/python -m prior_auth --guideline Documents/guideline.pdf --chart Documents/robert_mitchell_chart_final.pdf
+```
+
+Windows PowerShell (not built or tested):
+
+```powershell
+py -m venv .venv; .venv\Scripts\python.exe -m pip install -e .; .venv\Scripts\python.exe -m prior_auth --guideline Documents\guideline.pdf --chart Documents\robert_mitchell_chart_final.pdf
 ```
 
 Output lands in `out/<chart>__<guideline>/`:
@@ -39,8 +47,22 @@ Page transcription is cached by file hash under `.cache/ocr/`. Delete that direc
 
 ## Tests
 
-Unit tests do not call the APIs.
+Unit tests do not call the APIs. They were run on macOS only.
+
+macOS, after `pip install -e ".[dev]"`:
 
 ```bash
-uv run pytest
+pytest
+```
+
+Linux (not built or tested), after `.venv/bin/python -m pip install -e ".[dev]"`:
+
+```bash
+.venv/bin/python -m pytest
+```
+
+Windows PowerShell (not built or tested), after `.venv\Scripts\python.exe -m pip install -e ".[dev]"`:
+
+```powershell
+.venv\Scripts\python.exe -m pytest
 ```
