@@ -13,6 +13,16 @@ _HEADINGS = {
     Outcome.READY_FOR_REVIEW: "Ready for review",
 }
 
+_LETTER_NOTE = (
+    "This draft is for staff review before submission. "
+    "It does not add facts beyond the quotes above, and it is not an approval."
+)
+
+
+def letter_body(letter: str) -> str:
+    """The copyable request. The staff note is rendered beside it, not inside it."""
+    return letter.replace(f"\n\n{_LETTER_NOTE}", "").replace(_LETTER_NOTE, "").strip()
+
 _STATUS_LABELS = {
     "met": "Met",
     "not_met": "Not met",
@@ -67,7 +77,8 @@ def render_markdown(determination: Determination) -> str:
     lines.extend(_bullets(determination.required_documents, "The policy did not list required documents."))
     lines.extend(["", "## Letter of medical necessity", ""])
     if determination.letter:
-        lines.append(determination.letter)
+        lines.append(letter_body(determination.letter))
+        lines.extend(["", _LETTER_NOTE])
     else:
         lines.append(
             "Not drafted. A letter is written only when every required criterion is supported by a quote from the chart."
@@ -102,7 +113,8 @@ def render_html(determination: Determination) -> str:
             "<p>These documents belong to this policy. They may not apply to the ordered procedure.</p>"
         )
     letter = (
-        f"<pre>{html.escape(determination.letter)}</pre>"
+        f"<pre>{html.escape(letter_body(determination.letter))}</pre>"
+        f"<p class=\"meta\">{html.escape(_LETTER_NOTE)}</p>"
         if determination.letter
         else "<p>Not drafted. A letter is written only when every required criterion is supported by a quote from the chart.</p>"
     )

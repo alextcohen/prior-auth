@@ -636,12 +636,6 @@ def _letter(chart: Chart, pathway: Pathway, criteria: list[CriterionResult]) -> 
         spans = [span.strip() for span in row.quote.split("\n") if span.strip()]
         for span in spans:
             lines.append(f'- {row.text}: "{span}"{location}')
-    lines.extend(
-        [
-            "",
-            "This draft is for staff review before submission. It does not add facts beyond the quotes above, and it is not an approval.",
-        ]
-    )
     return "\n".join(lines)
 
 

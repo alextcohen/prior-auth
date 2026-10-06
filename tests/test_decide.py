@@ -121,6 +121,7 @@ def test_all_required_criteria_met_is_ready_and_letter_uses_quotes():
     assert determination.letter is not None
     assert "Duplex ultrasound demonstrates saphenous reflux." in determination.letter
     assert "No perforator treatment is planned." not in determination.letter
+    assert "not an approval" not in determination.letter
     assert determination.missing_items == []
 
 
