@@ -33,14 +33,6 @@ _STATUS_MARK = {
     "not_applicable": "–",
 }
 
-_TALLY_ORDER = (
-    (LeafStatus.NOT_DOCUMENTED, "not documented"),
-    (LeafStatus.NOT_MET, "not met"),
-    (LeafStatus.MET, "met"),
-    (LeafStatus.NOT_APPLICABLE, "not applicable"),
-)
-
-
 def letter_body(letter: str) -> str:
     """The copyable request. The staff note is rendered beside it, not inside it."""
     return letter.replace(f"\n\n{_LETTER_NOTE}", "").replace(_LETTER_NOTE, "").strip()
@@ -74,12 +66,13 @@ def render_markdown(determination: Determination) -> str:
     if determination.pathway_match_note:
         lines.append(f"- How it was matched: {determination.pathway_match_note}")
     lines.extend(["", "## Criteria", ""])
-    tally = _tally(determination.criteria)
+    presented = _present_all(determination.criteria)
+    tally = _tally(presented)
     if tally:
         lines.extend([tally, ""])
     if determination.criteria:
-        for row in determination.criteria:
-            lines.extend(_criterion_markdown(row))
+        for row, presentation in zip(determination.criteria, presented, strict=True):
+            lines.extend(_criterion_markdown(row, presentation))
     else:
         lines.append("No criteria were scored. The ordered procedure did not match a covered pathway.")
         lines.append("")
@@ -117,8 +110,12 @@ def render_markdown(determination: Determination) -> str:
 def render_html(determination: Determination) -> str:
     heading = _HEADINGS[determination.outcome]
     css_class = determination.outcome.value
+    presented = _present_all(determination.criteria)
     criteria = (
-        "\n".join(_criterion_html(row) for row in determination.criteria)
+        "\n".join(
+            _criterion_html(row, presentation)
+            for row, presentation in zip(determination.criteria, presented, strict=True)
+        )
         if determination.criteria
         else "<p>No criteria were scored. The ordered procedure did not match a covered pathway.</p>"
     )
@@ -141,7 +138,7 @@ def render_html(determination: Determination) -> str:
         else ""
     )
     matched = determination.matched_pathway_name or "none"
-    tally = _tally_html(determination.criteria)
+    tally = _tally_html(presented)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -204,19 +201,20 @@ def render_html(determination: Determination) -> str:
     .chip.met {{ background: var(--met-bg); color: var(--met); }}
     .chip.not_met {{ background: var(--bad-bg); color: var(--bad); }}
     .chip.not_documented {{ background: var(--gap-bg); color: var(--gap); }}
-    .chip.not_applicable {{ background: var(--na-bg); color: var(--na); }}
+    .chip.clear, .chip.spare {{ background: var(--met-bg); color: var(--met); }}
+    .chip.aside, .chip.not_applicable {{ background: var(--na-bg); color: var(--na); }}
     .card {{ background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--na-line); border-radius: 12px; padding: 0.75rem 0.95rem 0.85rem; margin: 0.55rem 0; }}
-    .card.met {{ border-left-color: #16a34a; }}
+    .card.met, .card.clear, .card.spare {{ border-left-color: #16a34a; }}
     .card.not_met {{ border-left-color: #dc2626; background: #fffafa; }}
     .card.not_documented {{ border-left-color: #d97706; background: #fffdf6; }}
-    .card.not_applicable {{ border-left-color: #a8a29e; }}
+    .card.aside, .card.not_applicable {{ border-left-color: #a8a29e; }}
     .card-top {{ display: flex; flex-wrap: wrap; gap: 0.4rem 0.7rem; align-items: center; }}
     .pill {{ display: inline-flex; align-items: center; gap: 0.28rem; font-size: 0.78rem; font-weight: 700; padding: 0.12rem 0.5rem 0.12rem 0.35rem; border-radius: 999px; }}
     .pill svg {{ width: 0.95rem; height: 0.95rem; }}
-    .pill.met {{ background: #dcfce7; color: var(--met); }}
+    .pill.met, .pill.clear, .pill.spare {{ background: #dcfce7; color: var(--met); }}
     .pill.not_met {{ background: #fee2e2; color: var(--bad); }}
     .pill.not_documented {{ background: #fef3c7; color: var(--gap); }}
-    .pill.not_applicable {{ background: #e7e5e4; color: var(--na); }}
+    .pill.aside, .pill.not_applicable {{ background: #e7e5e4; color: var(--na); }}
     .group {{ color: var(--muted); font-size: 0.82rem; }}
     blockquote {{ margin: 0.35rem 0; padding: 0.15rem 0 0.15rem 0.75rem; border-left: 3px solid #d6d3d1; white-space: pre-wrap; }}
     pre {{ white-space: pre-wrap; font-family: inherit; background: var(--card); padding: 1rem; border: 1px solid var(--line); border-radius: 10px; }}
@@ -275,14 +273,6 @@ _OUTCOME_ICON = {
     Outcome.FIX_BEFORE_SUBMIT: "alert",
     Outcome.READY_FOR_REVIEW: "check",
 }
-
-_STATUS_ICON = {
-    LeafStatus.MET: "check",
-    LeafStatus.NOT_MET: "x",
-    LeafStatus.NOT_DOCUMENTED: "alert",
-    LeafStatus.NOT_APPLICABLE: "minus",
-}
-
 
 def _icon(name: str) -> str:
     paths = {
@@ -351,6 +341,14 @@ def _action_content(
             gaps,
         )
     if gaps:
+        if all(item.startswith("Confirm this sentence in the chart") for item in gaps):
+            return (
+                "Confirm the cited sentence",
+                "fix",
+                "The quote was not found verbatim. It does not count as met, and it is not a denial.",
+                gaps,
+                [],
+            )
         return (
             "Add this before submitting",
             "fix",
@@ -373,9 +371,95 @@ def _action_content(
     return None
 
 
-def _criterion_markdown(row: CriterionResult) -> list[str]:
-    mark = _STATUS_MARK.get(row.status.value, "")
-    label = _STATUS_LABELS.get(row.status.value, row.status.value)
+def _presentation(row: CriterionResult, or_states: dict[str, str]) -> tuple[str, str, str]:
+    """Tone, mark, and label for one row.
+
+    An exclusion that is met blocks the request. An exclusion the chart
+    contradicts, or does not document, is cleared. An exclusion about a
+    different situation stays not applicable.
+
+    In an OR group, a branch that is not met is not a failure when another
+    branch is met. It is also not a failure when another branch is still
+    missing documentation. It stays a failure only when every branch is ruled out.
+    """
+    if row.group == "exclusion" and row.status == LeafStatus.MET:
+        return "not_met", "✕", "Applies"
+    if row.group == "exclusion" and row.status in (LeafStatus.NOT_MET, LeafStatus.NOT_DOCUMENTED):
+        return "clear", "✓", "Exclusion cleared"
+    parsed = _or_parts(row.group)
+    if parsed:
+        state = or_states.get(parsed[0])
+        if state == "met" and row.status in (LeafStatus.NOT_MET, LeafStatus.NOT_DOCUMENTED):
+            return "spare", "–", "Not needed"
+        if state == "open" and row.status == LeafStatus.NOT_MET:
+            return "aside", "–", "Not this option"
+    status = row.status.value
+    return status, _STATUS_MARK.get(status, ""), _STATUS_LABELS.get(status, status)
+
+
+def _present_all(criteria: list[CriterionResult]) -> list[tuple[str, str, str]]:
+    states = _or_states(criteria)
+    return [_presentation(row, states) for row in criteria]
+
+
+def _or_parts(group: str) -> tuple[str, str | None] | None:
+    if not group.startswith("any_of:"):
+        return None
+    rest = group.split(":", 1)[1]
+    marker = " / all_of:"
+    if marker in rest:
+        parent, option = rest.split(marker, 1)
+        return parent, option
+    return rest, None
+
+
+def _or_states(criteria: list[CriterionResult]) -> dict[str, str]:
+    """Whether each OR group is met, still open, or failed."""
+    leaves: dict[str, list[CriterionResult]] = {}
+    options: dict[str, dict[str, list[CriterionResult]]] = {}
+    for row in criteria:
+        parsed = _or_parts(row.group)
+        if parsed is None:
+            continue
+        parent, option = parsed
+        if option is None:
+            leaves.setdefault(parent, []).append(row)
+        else:
+            options.setdefault(parent, {}).setdefault(option, []).append(row)
+    states: dict[str, str] = {}
+    for name in set(leaves) | set(options):
+        alternative_states: list[LeafStatus] = []
+        for row in leaves.get(name, []):
+            if row.status != LeafStatus.NOT_APPLICABLE:
+                alternative_states.append(row.status)
+        for option_rows in options.get(name, {}).values():
+            option_state = _option_display_status(option_rows)
+            if option_state is not None and option_state != LeafStatus.NOT_APPLICABLE:
+                alternative_states.append(option_state)
+        if any(state == LeafStatus.MET for state in alternative_states):
+            states[name] = "met"
+        elif not alternative_states or any(state == LeafStatus.NOT_DOCUMENTED for state in alternative_states):
+            states[name] = "open"
+        else:
+            states[name] = "failed"
+    return states
+
+
+def _option_display_status(rows: list[CriterionResult]) -> LeafStatus | None:
+    active = [row.status for row in rows if row.status != LeafStatus.NOT_APPLICABLE]
+    if not active:
+        return None
+    if any(status == LeafStatus.NOT_MET for status in active):
+        return LeafStatus.NOT_MET
+    if any(status == LeafStatus.NOT_DOCUMENTED for status in active):
+        return LeafStatus.NOT_DOCUMENTED
+    if any(status == LeafStatus.MET for status in active):
+        return LeafStatus.MET
+    return LeafStatus.NOT_APPLICABLE
+
+
+def _criterion_markdown(row: CriterionResult, presentation: tuple[str, str, str]) -> list[str]:
+    _tone, mark, label = presentation
     lines = [
         f"### {mark} {row.text}",
         "",
@@ -395,21 +479,49 @@ def _criterion_markdown(row: CriterionResult) -> list[str]:
     return lines
 
 
-def _criterion_html(row: CriterionResult) -> str:
-    status = row.status.value
+_TONE_ICON = {
+    "met": "check",
+    "clear": "check",
+    "spare": "minus",
+    "aside": "minus",
+    "not_met": "x",
+    "not_documented": "alert",
+    "not_applicable": "minus",
+}
+
+_TONE_ORDER = (
+    ("not_documented", "not documented"),
+    ("not_met", "not met"),
+    ("met", "met"),
+    ("clear", "exclusion cleared"),
+    ("spare", "not needed"),
+    ("aside", "not this option"),
+    ("not_applicable", "not applicable"),
+)
+
+
+def _criterion_html(row: CriterionResult, presentation: tuple[str, str, str]) -> str:
+    tone, _mark, label = presentation
     spans = [span.strip() for span in row.quote.split("\n") if span.strip()]
+    unverified = bool(spans) and row.status == LeafStatus.NOT_DOCUMENTED and not row.quote_verified
     quote = (
-        "".join(f"<blockquote>{html.escape(span)}</blockquote>" for span in spans)
-        if spans
-        else "<p class=\"meta\">No quote</p>"
+        (
+            "<p class=\"meta\">Unverified citation. These words were not found verbatim in the chart.</p>"
+            if unverified
+            else ""
+        )
+        + (
+            "".join(f"<blockquote>{html.escape(span)}</blockquote>" for span in spans)
+            if spans
+            else "<p class=\"meta\">No quote</p>"
+        )
     )
     source = f"<p class=\"meta\">Source: {html.escape(row.section)}</p>" if row.section else ""
     note = f"<p class=\"meta\">{html.escape(row.rationale)}</p>" if row.rationale else ""
-    label = _STATUS_LABELS.get(status, status)
     return (
-        f"<article class=\"card {status}\">"
+        f"<article class=\"card {tone}\">"
         "<div class=\"card-top\">"
-        f"<span class=\"pill {status}\">{_icon(_STATUS_ICON.get(row.status, 'minus'))}{html.escape(label)}</span>"
+        f"<span class=\"pill {tone}\">{_icon(_TONE_ICON.get(tone, 'minus'))}{html.escape(label)}</span>"
         f"<span class=\"group\">{html.escape(_group_label(row.group))}</span>"
         "</div>"
         f"<h3>{html.escape(row.text)}</h3>"
@@ -418,21 +530,21 @@ def _criterion_html(row: CriterionResult) -> str:
     )
 
 
-def _tally(criteria: list[CriterionResult]) -> str:
-    counts = Counter(row.status for row in criteria)
-    bits = [f"{counts[status]} {label}" for status, label in _TALLY_ORDER if counts[status]]
+def _tally(presented: list[tuple[str, str, str]]) -> str:
+    counts = Counter(tone for tone, _mark, _label in presented)
+    bits = [f"{counts[tone]} {label}" for tone, label in _TONE_ORDER if counts[tone]]
     return "Criteria: " + ", ".join(bits) + "." if bits else ""
 
 
-def _tally_html(criteria: list[CriterionResult]) -> str:
-    counts = Counter(row.status for row in criteria)
+def _tally_html(presented: list[tuple[str, str, str]]) -> str:
+    counts = Counter(tone for tone, _mark, _label in presented)
     chips = []
-    for status, label in _TALLY_ORDER:
-        count = counts[status]
+    for tone, label in _TONE_ORDER:
+        count = counts[tone]
         if not count:
             continue
         chips.append(
-            f"<span class=\"chip {status.value}\">{_icon(_STATUS_ICON[status])}{count} {html.escape(label)}</span>"
+            f"<span class=\"chip {tone}\">{_icon(_TONE_ICON[tone])}{count} {html.escape(label)}</span>"
         )
     if not chips:
         return ""

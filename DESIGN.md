@@ -24,7 +24,7 @@ Prompts are files in `src/prior_auth/prompts/`. The medical criteria for a case 
 - If there is no CPT overlap because one side has no codes, the model's pathway id is used. If that id is empty or unknown, the procedure is outside the policy.
 - Every `all_of` leaf must be met. Each `any_of` group needs one met leaf, or one nested `all_of` alternative whose leaves are all met. A met exclusion denies.
 - A `not_met` leaf outranks a documentation gap. Gaps, with no hard contradiction, are "fix before submit."
-- A quote that is not in the chart text, after whitespace and case folding, is discarded and the leaf becomes `not_documented`. Several verbatim spans joined by a slash, ellipsis, or the word "and" are kept when every span is in the chart. A paraphrase is discarded. The letter is built only from quotes that survived that check, and only when the outcome is ready for review.
+- A quote that is not in the chart text, after whitespace and case folding, cannot support `met`. The cited words stay on the criterion as an unverified citation, and the packet asks a reviewer to find that sentence. Those leaves are scored once more, and a retried quote is kept only when it is actually in the chart. Several verbatim spans joined by a slash, ellipsis, or the word "and" are kept when every span is in the chart. The letter is built only from quotes that survived the check, and only when the outcome is ready for review.
 
 The packet is one HTML page rendered from `determination.json`. Rendering does not score anything again.
 
@@ -34,7 +34,7 @@ Rules that live only in a table are an extraction failure. The pathway JSON will
 
 A chart that never states the ordered procedure stops at "do not submit," because there is nothing to match. A scanned order sticker that the transcription garbles fails the same way, or matches the wrong CPT. The page markdown in `ocr/` is the place to look.
 
-Paraphrased evidence is rejected on purpose. The packet will under-call "met" rather than cite a sentence the chart does not contain. That shows up as a gap plus a warning that the quote was discarded.
+Paraphrased evidence is rejected on purpose. The packet will under-call "met" rather than cite a sentence the chart does not contain. The cited words stay visible and unverified, and they are not a denial.
 
 A very long guideline is shortened only after it passes a character budget. Bibliography pages go first, then pages that do not look like indications, coding, or documentation requirements. A rule that lives only in a dropped page would be missed. This sample policy fits without trimming. The bibliography is the part that would go.
 

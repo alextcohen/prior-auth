@@ -2,6 +2,7 @@ from prior_auth.decide import (
     chart_codes,
     codes_in,
     decide,
+    merge_rescored,
     needs_model_proposal,
     normalize_guideline,
     quote_in_text,
@@ -214,6 +215,21 @@ def test_pacemaker_cpt_is_outside_the_vein_policy():
     assert any("UnitedHealthcare" in warning for warning in determination.warnings)
 
 
+def test_a_retried_verbatim_quote_replaces_the_unverified_one():
+    original = [_score("reflux", LeafStatus.MET, "duplex shows reflux of 1.2 seconds")]
+    replacement = [_score("reflux", LeafStatus.MET, "Duplex ultrasound demonstrates saphenous reflux.")]
+    merged = merge_rescored(original, replacement, CHART_TEXT)
+    determination = decide(
+        _guideline(_pathway(all_of=[_leaf("reflux", "Demonstrated saphenous reflux")], any_of_groups=[], exclusions=[])),
+        _chart("36478"),
+        CHART_TEXT,
+        merged,
+    )
+    assert determination.criteria[0].status == LeafStatus.MET
+    assert determination.criteria[0].quote_verified is True
+    assert "1.2 seconds" not in (determination.letter or "")
+
+
 def test_rejected_quote_becomes_not_documented():
     scores = [
         _score("reflux", LeafStatus.MET, "duplex shows reflux of 1.2 seconds"),
@@ -221,8 +237,12 @@ def test_rejected_quote_becomes_not_documented():
     pathway = _pathway(all_of=[_leaf("reflux", "Demonstrated saphenous reflux")], any_of_groups=[], exclusions=[])
     determination = decide(_guideline(pathway), _chart("36478"), CHART_TEXT, scores)
     assert determination.criteria[0].status == LeafStatus.NOT_DOCUMENTED
-    assert determination.criteria[0].quote == ""
+    assert determination.criteria[0].quote == "duplex shows reflux of 1.2 seconds"
+    assert determination.criteria[0].quote_verified is False
     assert determination.outcome == Outcome.FIX_BEFORE_SUBMIT
+    assert determination.denial_risks == []
+    assert any("Confirm this sentence in the chart" in item for item in determination.missing_items)
+    assert "duplex shows reflux of 1.2 seconds" in determination.missing_items[0]
     assert any("not in the chart" in warning for warning in determination.warnings)
     assert determination.letter is None
 
@@ -495,7 +515,8 @@ def test_and_joined_verbatim_spans_stay_met_and_a_paraphrase_does_not():
     assert reflux.status == LeafStatus.MET
     assert "Duplex ultrasound demonstrates saphenous reflux." in reflux.quote
     assert size.status == LeafStatus.NOT_DOCUMENTED
-    assert size.quote == ""
+    assert "wider than 3 mm" in size.quote
+    assert size.quote_verified is False
 
 
 def test_nested_and_contradiction_denies_when_no_alternative_remains():

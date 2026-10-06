@@ -3,8 +3,16 @@
 import sys
 from pathlib import Path
 
-from prior_auth.decide import decide, match_pathway, needs_model_proposal, normalize_guideline
-from prior_auth.extract import extract_chart, extract_guideline, propose_pathway, score_pathway
+from prior_auth.decide import (
+    decide,
+    match_pathway,
+    merge_rescored,
+    needs_model_proposal,
+    normalize_guideline,
+    ungrounded_scores,
+)
+from prior_auth.errors import PriorAuthError
+from prior_auth.extract import extract_chart, extract_guideline, propose_pathway, rescore_quotes, score_pathway
 from prior_auth.ocr import ocr_pdf
 from prior_auth.render import render_html
 from prior_auth.trim import trim_guideline
@@ -46,6 +54,15 @@ def run_case(guideline_path: Path, chart_path: Path, out_dir: Path) -> Path:
     if peeked.pathway is not None and peeked.non_covered is None:
         _log(f"Scoring criteria for {peeked.pathway.name}")
         scores = score_pathway(peeked.pathway, chart, chart_markdown)
+        failed = ungrounded_scores(scores, chart_markdown)
+        if failed:
+            _log(f"Rechecking {len(failed)} quote(s) that were not copied from the chart")
+            try:
+                retried = rescore_quotes(peeked.pathway, chart, chart_markdown, failed)
+            except PriorAuthError as exc:
+                extra_warnings.append(f"Quote recheck failed: {exc}")
+            else:
+                scores = merge_rescored(scores, retried, chart_markdown)
 
     determination = decide(
         guideline,

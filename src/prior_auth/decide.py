@@ -349,18 +349,48 @@ def verify_scores(
             verified.append(score.model_copy(update={"quote": "\n".join(spans)}))
             continue
         warnings.append(
-            f"Quote for criterion {score.criterion_id} is not in the chart and was discarded."
+            f"Quote for criterion {score.criterion_id} is not in the chart and was kept as an unverified citation."
         )
         verified.append(
             score.model_copy(
                 update={
                     "status": LeafStatus.NOT_DOCUMENTED,
-                    "quote": "",
-                    "rationale": "Cited text does not appear in the chart.",
+                    "quote": quote,
+                    "rationale": (
+                        "Cited text was not found verbatim in the chart. "
+                        "Confirm the sentence before treating the fact as missing."
+                    ),
                 }
             )
         )
     return verified, warnings
+
+
+def ungrounded_scores(scores: list[LeafScore], chart_text: str) -> list[LeafScore]:
+    """Scores that cited words the chart does not contain. Empty quotes are left alone."""
+    rejected: list[LeafScore] = []
+    for score in scores:
+        quote = score.quote.strip()
+        if quote and not grounded_quotes(quote, chart_text):
+            rejected.append(score)
+    return rejected
+
+
+def merge_rescored(
+    scores: list[LeafScore],
+    replacements: list[LeafScore],
+    chart_text: str,
+) -> list[LeafScore]:
+    """Keep a retried score only when its quote is actually in the chart."""
+    by_id = {score.criterion_id: score for score in replacements}
+    merged: list[LeafScore] = []
+    for score in scores:
+        replacement = by_id.get(score.criterion_id)
+        if replacement is not None and grounded_quotes(replacement.quote, chart_text):
+            merged.append(replacement)
+        else:
+            merged.append(score)
+    return merged
 
 
 def decide(
@@ -498,6 +528,15 @@ def _criterion_results(
     return rows
 
 
+def _gap_text(row: CriterionResult, label: str = "") -> str:
+    """An unverified citation is a review step. An empty quote is a missing fact."""
+    text = f"{label}: {row.text}" if label else row.text
+    quote = row.quote.strip()
+    if quote and row.status == LeafStatus.NOT_DOCUMENTED and not row.quote_verified:
+        return f'Confirm this sentence in the chart for "{text}": "{quote}"'
+    return text
+
+
 def _option_status(leaves: list[Leaf], status_of) -> LeafStatus:
     """An AND alternative fails on any contradiction, and stays open on a gap."""
     if not leaves:
@@ -563,19 +602,19 @@ def _evaluate(
         else:
             failed_groups.append(group)
 
-    missing = [leaf.text for leaf in missing_leaves]
+    missing = [_gap_text(by_id[leaf.id]) for leaf in missing_leaves if leaf.id in by_id]
     for group in open_groups:
         noted = False
         for leaf in group.leaves:
-            if status_of(leaf.id) == LeafStatus.NOT_DOCUMENTED:
-                missing.append(leaf.text)
+            if status_of(leaf.id) == LeafStatus.NOT_DOCUMENTED and leaf.id in by_id:
+                missing.append(_gap_text(by_id[leaf.id]))
                 noted = True
         for option in group.all_of_options:
             if _option_status(option.leaves, status_of) != LeafStatus.NOT_DOCUMENTED:
                 continue
             for leaf in option.leaves:
-                if status_of(leaf.id) == LeafStatus.NOT_DOCUMENTED:
-                    missing.append(f"{option.name}: {leaf.text}")
+                if status_of(leaf.id) == LeafStatus.NOT_DOCUMENTED and leaf.id in by_id:
+                    missing.append(_gap_text(by_id[leaf.id], option.name))
                     noted = True
         if not noted:
             options = "; ".join(leaf.text for leaf in group.leaves)
@@ -597,12 +636,16 @@ def _evaluate(
         return Outcome.DO_NOT_SUBMIT, lead, missing, risks
 
     if missing:
-        return (
-            Outcome.FIX_BEFORE_SUBMIT,
-            f"The ordered procedure matches {pathway.name}, but the chart is missing documentation this policy requires.",
-            missing,
-            [],
-        )
+        if all(item.startswith("Confirm this sentence in the chart") for item in missing):
+            reason = (
+                f"The ordered procedure matches {pathway.name}, but a cited sentence was not found verbatim in the chart. "
+                "A reviewer confirms it before submitting."
+            )
+        else:
+            reason = (
+                f"The ordered procedure matches {pathway.name}, but the chart is missing documentation this policy requires."
+            )
+        return Outcome.FIX_BEFORE_SUBMIT, reason, missing, []
 
     return (
         Outcome.READY_FOR_REVIEW,

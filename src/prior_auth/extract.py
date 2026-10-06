@@ -58,6 +58,56 @@ def propose_pathway(guideline: Guideline, chart: Chart) -> PathwayProposal:
 
 
 def score_pathway(pathway: Pathway, chart: Chart, chart_markdown: str) -> list[LeafScore]:
+    criteria = _criteria(pathway)
+    if not criteria:
+        return []
+    payload = {
+        "criteria": criteria,
+        "extracted_facts": [fact.model_dump() for fact in chart.facts],
+        "chart": clip(chart_markdown, 120_000),
+    }
+    batch = parse_model(
+        [
+            {"role": "system", "content": load_prompt("score.md")},
+            {"role": "user", "content": json.dumps(payload, indent=2)},
+        ],
+        ScoreBatch,
+    )
+    return batch.scores
+
+
+def rescore_quotes(
+    pathway: Pathway,
+    chart: Chart,
+    chart_markdown: str,
+    failed: list[LeafScore],
+) -> list[LeafScore]:
+    """Ask once more for an exact span. Only the leaves whose quotes failed are sent."""
+    by_id = {item["id"]: item for item in _criteria(pathway)}
+    criteria = []
+    for score in failed:
+        item = by_id.get(score.criterion_id)
+        if item is None:
+            continue
+        criteria.append({**item, "rejected_quote": score.quote})
+    if not criteria:
+        return []
+    payload = {
+        "criteria": criteria,
+        "extracted_facts": [fact.model_dump() for fact in chart.facts],
+        "chart": clip(chart_markdown, 120_000),
+    }
+    batch = parse_model(
+        [
+            {"role": "system", "content": load_prompt("rescore.md")},
+            {"role": "user", "content": json.dumps(payload, indent=2)},
+        ],
+        ScoreBatch,
+    )
+    return batch.scores
+
+
+def _criteria(pathway: Pathway) -> list[dict[str, str]]:
     criteria: list[dict[str, str]] = []
     for leaf in pathway.all_of:
         criteria.append({"id": leaf.id, "group": "all_of", "text": leaf.text})
@@ -75,19 +125,4 @@ def score_pathway(pathway: Pathway, chart: Chart, chart_markdown: str) -> list[L
                 )
     for leaf in pathway.exclusions:
         criteria.append({"id": leaf.id, "group": "exclusion", "text": leaf.text})
-    if not criteria:
-        return []
-
-    payload = {
-        "criteria": criteria,
-        "extracted_facts": [fact.model_dump() for fact in chart.facts],
-        "chart": clip(chart_markdown, 120_000),
-    }
-    batch = parse_model(
-        [
-            {"role": "system", "content": load_prompt("score.md")},
-            {"role": "user", "content": json.dumps(payload, indent=2)},
-        ],
-        ScoreBatch,
-    )
-    return batch.scores
+    return criteria

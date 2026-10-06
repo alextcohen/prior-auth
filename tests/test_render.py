@@ -49,6 +49,129 @@ def test_fix_packet_leads_with_the_gaps():
     assert "<script" not in page
 
 
+def test_unmet_exclusion_is_shown_as_clear():
+    determination = Determination(
+        outcome=Outcome.READY_FOR_REVIEW,
+        outcome_reason="Every required criterion is supported.",
+        criteria=[
+            CriterionResult(
+                criterion_id="size",
+                text="Varicosities at least 3 millimeters",
+                group="all_of",
+                status=LeafStatus.NOT_MET,
+                quote="The vein diameter is 2 mm.",
+            ),
+            CriterionResult(
+                criterion_id="cosmetic",
+                text="Cosmetic use does not meet medical necessity",
+                group="exclusion",
+                status=LeafStatus.NOT_MET,
+                quote="Symptoms interfere with daily activities.",
+            ),
+            CriterionResult(
+                criterion_id="concurrent",
+                text="Concurrent treatment is excluded",
+                group="exclusion",
+                status=LeafStatus.MET,
+                quote="Performed at the same time.",
+            ),
+            CriterionResult(
+                criterion_id="pregnancy",
+                text="Treatment during pregnancy is excluded",
+                group="exclusion",
+                status=LeafStatus.NOT_APPLICABLE,
+            ),
+            CriterionResult(
+                criterion_id="prior_ablation",
+                text="Prior ablation of the same vein is excluded",
+                group="exclusion",
+                status=LeafStatus.NOT_DOCUMENTED,
+            ),
+        ],
+    )
+    page = render_html(determination)
+
+    def card_before(heading: str) -> str:
+        return page[page.index(heading) - 500 : page.index(heading)]
+
+    assert "clear" in card_before("Cosmetic use")
+    assert "Exclusion cleared" in card_before("Cosmetic use")
+    assert "not_met" in card_before("Varicosities at least 3 millimeters")
+    assert "Not met" in card_before("Varicosities at least 3 millimeters")
+    assert "not_met" in card_before("Concurrent treatment")
+    assert "Applies" in card_before("Concurrent treatment")
+    assert "not_applicable" in card_before("Treatment during pregnancy")
+    assert "Not applicable" in card_before("Treatment during pregnancy")
+    assert "clear" in card_before("Prior ablation")
+    assert "Exclusion cleared" in card_before("Prior ablation")
+    assert "not_documented" not in card_before("Prior ablation")
+
+
+def test_or_branch_not_met_is_not_a_failure_when_another_branch_is_met():
+    determination = Determination(
+        outcome=Outcome.READY_FOR_REVIEW,
+        outcome_reason="Every required criterion is supported.",
+        criteria=[
+            CriterionResult(
+                criterion_id="ulcer",
+                text="Ulceration secondary to venous stasis",
+                group="any_of:indications",
+                status=LeafStatus.NOT_MET,
+            ),
+            CriterionResult(
+                criterion_id="symptoms",
+                text="Symptoms interfere with daily activities",
+                group="any_of:indications",
+                status=LeafStatus.MET,
+                quote="Symptoms interfere with daily activities.",
+            ),
+            CriterionResult(
+                criterion_id="size",
+                text="Varicosities at least 3 millimeters",
+                group="all_of",
+                status=LeafStatus.NOT_MET,
+                quote="The vein diameter is 2 mm.",
+            ),
+        ],
+    )
+    page = render_html(determination)
+
+    def card_for(heading: str) -> str:
+        at = page.index(heading)
+        return page[page.rfind("<article", 0, at) : at]
+
+    ulcer = card_for("Ulceration secondary")
+    assert "spare" in ulcer
+    assert "Not needed" in ulcer
+    assert "not_met" not in ulcer
+    assert 'class="card met"' in card_for("Symptoms interfere")
+    assert 'class="card not_met"' in card_for("Varicosities at least 3 millimeters")
+
+
+def test_or_branch_stays_red_when_every_branch_is_ruled_out():
+    determination = Determination(
+        outcome=Outcome.DO_NOT_SUBMIT,
+        outcome_reason="None of the qualifying indications are met.",
+        criteria=[
+            CriterionResult(
+                criterion_id="ulcer",
+                text="Ulceration secondary to venous stasis",
+                group="any_of:indications",
+                status=LeafStatus.NOT_MET,
+            ),
+            CriterionResult(
+                criterion_id="bleeding",
+                text="Recurrent bleeding from a vein",
+                group="any_of:indications",
+                status=LeafStatus.NOT_MET,
+            ),
+        ],
+    )
+    page = render_html(determination)
+    assert page.count('class="card not_met"') == 2
+    assert "Not needed" not in page
+
+
 def test_letter_note_sits_outside_the_copyable_box():
     determination = Determination(
         outcome=Outcome.READY_FOR_REVIEW,
