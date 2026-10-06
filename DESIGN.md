@@ -9,6 +9,8 @@ A run starts with a guideline PDF and a chart PDF. The model reads both, writes 
 - Simplicity with one command, always two PDFs: guideline and patient notes.
 - The tool is not meant to make a final decision and must always reccomend and be seen as a resource to assist clinician staff
 - Users will have a medical background to parse some of the information provided in the output packet
+- As long as not to an unreasonable scope, token and computation load will not be heavily optimized for an initial solution
+- There is no worry about security and privacy compliance for this iteration such as HIPAA
 
 ## Path of run
 
@@ -35,11 +37,11 @@ Left in the result folder:
 
 ## How the headline is chosen
 
-| Line | When | Letter |
-| --- | --- | --- |
-| Do not submit | Outside this policy, a non-covered code, an exclusion, or the chart contradicts a requirement | No |
-| Fix before submit | The order matches, and a fact is missing or a quote needs a person to confirm it | No |
-| Ready for review | Every requirement has a quote that appears in the chart | Yes, from those quotes only |
+| Line              | When                                                                                          | Letter                      |
+| ----------------- | --------------------------------------------------------------------------------------------- | --------------------------- |
+| Do not submit     | Outside this policy, a non-covered code, an exclusion, or the chart contradicts a requirement | No                          |
+| Fix before submit | The order matches, and a fact is missing or a quote needs a person to confirm it              | No                          |
+| Ready for review  | Every requirement has a quote that appears in the chart                                       | Yes, from those quotes only |
 
 A person still confirms the quotes and submits.
 
@@ -118,6 +120,7 @@ The model assigns these from `prompts/score.md`. The code rolls them up. It does
 - Allow flags on the command to pass info to AI Model prompts to adjust an output if a rerun on the same guide/patient is desired.
 - Add flags for scan depth to have shallower scans and allow for determining quick output on bulk patients
 - A deeper logic tree than AND, OR, and AND-inside-OR: extend `schemas.py`, the guideline prompt, and `_evaluate`.
+- Take a look at AI token and computation usage to determine if any parts need to be optimized or altered for cheaper / faster runtime
 - A deeper set of logic on the quote rule: `verify_scores` and `merge_rescored` in `decide.py`, plus `prompts/rescore.md` if the retry instruction changes to help improve output certainty.
 - Methods for rescan of an initial bad scan. Extraction still reads new markdown. Keep the cache key tied to rescanned file.
 
