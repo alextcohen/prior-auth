@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
         traceback.print_exc()
         return 1
     print(packet)
-    open_html(packet.with_suffix(".html"))
+    open_html(packet)
     return 0
 
 

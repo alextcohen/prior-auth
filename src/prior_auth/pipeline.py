@@ -3,12 +3,10 @@
 import sys
 from pathlib import Path
 
-from prior_auth.adjudicate import propose_pathway, score_pathway
 from prior_auth.decide import decide, match_pathway, needs_model_proposal, normalize_guideline
-from prior_auth.errors import PriorAuthError
-from prior_auth.extract import extract_chart, extract_guideline
+from prior_auth.extract import extract_chart, extract_guideline, propose_pathway, score_pathway
 from prior_auth.ocr import ocr_pdf
-from prior_auth.render import render_html, render_markdown
+from prior_auth.render import render_html
 from prior_auth.trim import trim_guideline
 
 
@@ -58,10 +56,10 @@ def run_case(guideline_path: Path, chart_path: Path, out_dir: Path) -> Path:
     )
     determination.warnings = [*extra_warnings, *determination.warnings]
     _write_model(out_dir / "determination.json", determination)
-    _write(out_dir / "packet.md", render_markdown(determination))
-    _write(out_dir / "packet.html", render_html(determination))
-    _log(f"Wrote {out_dir / 'packet.md'}")
-    return out_dir / "packet.md"
+    packet = out_dir / "packet.html"
+    _write(packet, render_html(determination))
+    _log(f"Wrote {packet}")
+    return packet
 
 
 def _write(path: Path, text: str) -> None:

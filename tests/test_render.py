@@ -1,5 +1,5 @@
-from prior_auth.render import render_html, render_markdown
-from prior_auth.schemas import Determination, Outcome
+from prior_auth.render import render_html
+from prior_auth.schemas import CriterionResult, Determination, LeafStatus, Outcome
 
 
 def test_packet_opens_with_the_outcome_and_omits_an_unready_letter():
@@ -13,14 +13,40 @@ def test_packet_opens_with_the_outcome_and_omits_an_unready_letter():
         guideline_payer="BCBS Florida",
         letter=None,
     )
-    markdown = render_markdown(determination)
     html = render_html(determination)
-    assert markdown.splitlines()[0] == "Do not submit"
-    assert "33207" in markdown
-    assert "Not drafted" in markdown
     assert "<h1>Do not submit</h1>" in html
+    assert "33207" in html
     assert "Not drafted" in html
     assert "<script" not in html
+
+
+def test_fix_packet_leads_with_the_gaps():
+    determination = Determination(
+        outcome=Outcome.FIX_BEFORE_SUBMIT,
+        outcome_reason="The chart is missing documentation this policy requires.",
+        missing_items=["Compression therapy for at least 3 months"],
+        criteria=[
+            CriterionResult(
+                criterion_id="compression",
+                text="Compression therapy for at least 3 months",
+                group="all_of",
+                status=LeafStatus.NOT_DOCUMENTED,
+            ),
+            CriterionResult(
+                criterion_id="size",
+                text="Varicosities at least 3 millimeters",
+                group="all_of",
+                status=LeafStatus.MET,
+                quote="The vein diameter is 6.2 mm.",
+            ),
+        ],
+    )
+    page = render_html(determination)
+    assert page.index("Add this before submitting") < page.index("<h2>Criteria</h2>")
+    assert 'class="panel fix"' in page
+    assert 'class="card not_documented"' in page
+    assert 'class="card met"' in page
+    assert "<script" not in page
 
 
 def test_letter_note_sits_outside_the_copyable_box():

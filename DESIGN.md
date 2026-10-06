@@ -26,7 +26,7 @@ Prompts are files in `src/prior_auth/prompts/`. The medical criteria for a case 
 - A `not_met` leaf outranks a documentation gap. Gaps, with no hard contradiction, are "fix before submit."
 - A quote that is not in the chart text, after whitespace and case folding, is discarded and the leaf becomes `not_documented`. Several verbatim spans joined by a slash, ellipsis, or the word "and" are kept when every span is in the chart. A paraphrase is discarded. The letter is built only from quotes that survived that check, and only when the outcome is ready for review.
 
-The packet is rendered from `determination.json`. Rendering does not score anything again.
+The packet is one HTML page rendered from `determination.json`. Rendering does not score anything again.
 
 ## What breaks first
 

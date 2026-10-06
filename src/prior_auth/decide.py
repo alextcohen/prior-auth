@@ -628,7 +628,7 @@ def _letter(chart: Chart, pathway: Pathway, criteria: list[CriterionResult]) -> 
         f"Please authorize {procedure} for {patient}.",
         f"The request is filed under {pathway.name}.",
         "",
-        "The following statements are copied from the chart. Each one supports a criterion in the coverage guideline:",
+        "The following notes from the charts support the criteria in the coverage guideline:",
         "",
     ]
     for row in supported:
