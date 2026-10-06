@@ -1,12 +1,14 @@
 # Prior authorization review packet
 
-A one-command review for clinic staff. It reads a coverage-guideline PDF and a patient-chart PDF, then writes a packet a reviewer can use before submitting prior authorization. It does not submit the request.
+One command for clinic staff. A coverage-guideline PDF and a patient-chart PDF go in. A review packet comes out. A person confirms the quotes and submits. The tool does not approve care.
+
+The path of a run, where the logic lives, and the tradeoffs are in [DESIGN.md](DESIGN.md).
 
 The packet opens with one of three lines:
 
-- **Do not submit** — the ordered procedure is outside this policy, an exclusion applies, or the chart contradicts a required criterion.
-- **Fix before submit** — the procedure matches, and at least one required fact is missing.
-- **Ready for review** — every required criterion is supported by a quote that appears in the chart. A person still confirms the quotes and submits.
+- **Do not submit** — outside this policy, a non-covered code, an exclusion, or the chart contradicts a requirement. No letter.
+- **Fix before submit** — the order matches, and a required fact is missing or a quote needs a person to confirm it. No letter.
+- **Ready for review** — every requirement has a quote that appears in the chart. A person still confirms the quotes and submits.
 
 ## Run
 
